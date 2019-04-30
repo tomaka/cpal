@@ -1,5 +1,5 @@
-extern crate coreaudio;
 extern crate core_foundation_sys;
+extern crate coreaudio;
 
 use ChannelCount;
 use CreationError;
@@ -14,60 +14,41 @@ use SupportedFormat;
 use UnknownTypeInputBuffer;
 use UnknownTypeOutputBuffer;
 
+use parking_lot::Mutex;
 use std::ffi::CStr;
 use std::fmt;
 use std::mem;
 use std::os::raw::c_char;
 use std::ptr::null;
-use std::sync::{Arc, Mutex};
+use std::slice;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use std::slice;
 
-use self::coreaudio::audio_unit::{AudioUnit, Scope, Element};
+use self::core_foundation_sys::string::{CFStringGetCStringPtr, CFStringRef};
 use self::coreaudio::audio_unit::render_callback::{self, data};
+use self::coreaudio::audio_unit::{AudioUnit, Element, Scope};
 use self::coreaudio::sys::{
-    AudioBuffer,
-    AudioBufferList,
-    AudioDeviceID,
-    AudioObjectAddPropertyListener,
-    AudioObjectGetPropertyData,
-    AudioObjectGetPropertyDataSize,
-    AudioObjectID,
-    AudioObjectPropertyAddress,
-    AudioObjectPropertyScope,
-    AudioObjectRemovePropertyListener,
-    AudioObjectSetPropertyData,
-    AudioStreamBasicDescription,
-    AudioValueRange,
-    kAudioDevicePropertyAvailableNominalSampleRates,
-    kAudioDevicePropertyDeviceNameCFString,
-    kAudioDevicePropertyNominalSampleRate,
-    kAudioObjectPropertyScopeInput,
-    kAudioObjectPropertyScopeGlobal,
-    kAudioDevicePropertyScopeOutput,
-    kAudioDevicePropertyStreamConfiguration,
-    kAudioDevicePropertyStreamFormat,
-    kAudioFormatFlagIsFloat,
-    kAudioFormatFlagIsPacked,
-    kAudioFormatLinearPCM,
-    kAudioHardwareNoError,
-    kAudioObjectPropertyElementMaster,
-    kAudioObjectPropertyScopeOutput,
-    kAudioOutputUnitProperty_CurrentDevice,
-    kAudioOutputUnitProperty_EnableIO,
-    kAudioUnitProperty_StreamFormat,
-    kCFStringEncodingUTF8,
-    OSStatus,
-};
-use self::core_foundation_sys::string::{
-    CFStringRef,
-    CFStringGetCStringPtr,
+    kAudioDevicePropertyAvailableNominalSampleRates, kAudioDevicePropertyDeviceNameCFString,
+    kAudioDevicePropertyNominalSampleRate, kAudioDevicePropertyScopeOutput,
+    kAudioDevicePropertyStreamConfiguration, kAudioDevicePropertyStreamFormat,
+    kAudioFormatFlagIsFloat, kAudioFormatFlagIsPacked, kAudioFormatLinearPCM,
+    kAudioHardwareNoError, kAudioObjectPropertyElementMaster, kAudioObjectPropertyScopeGlobal,
+    kAudioObjectPropertyScopeInput, kAudioObjectPropertyScopeOutput,
+    kAudioOutputUnitProperty_CurrentDevice, kAudioOutputUnitProperty_EnableIO,
+    kAudioUnitProperty_StreamFormat, kCFStringEncodingUTF8, AudioBuffer, AudioBufferList,
+    AudioDeviceID, AudioObjectAddPropertyListener, AudioObjectGetPropertyData,
+    AudioObjectGetPropertyDataSize, AudioObjectID, AudioObjectPropertyAddress,
+    AudioObjectPropertyScope, AudioObjectRemovePropertyListener, AudioObjectSetPropertyData,
+    AudioStreamBasicDescription, AudioValueRange, OSStatus,
 };
 
 mod enumerate;
 
-pub use self::enumerate::{Devices, SupportedInputFormats, SupportedOutputFormats, default_input_device, default_output_device};
+pub use self::enumerate::{
+    default_input_device, default_output_device, Devices, SupportedInputFormats,
+    SupportedOutputFormats,
+};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Device {
@@ -108,8 +89,7 @@ impl Device {
     fn supported_formats(
         &self,
         scope: AudioObjectPropertyScope,
-    ) -> Result<SupportedOutputFormats, FormatsEnumerationError>
-    {
+    ) -> Result<SupportedOutputFormats, FormatsEnumerationError> {
         let mut property_address = AudioObjectPropertyAddress {
             mSelector: kAudioDevicePropertyStreamConfiguration,
             mScope: scope,
@@ -212,30 +192,37 @@ impl Device {
         }
     }
 
-    pub fn supported_input_formats(&self) -> Result<SupportedOutputFormats, FormatsEnumerationError> {
+    pub fn supported_input_formats(
+        &self,
+    ) -> Result<SupportedOutputFormats, FormatsEnumerationError> {
         self.supported_formats(kAudioObjectPropertyScopeInput)
     }
 
-    pub fn supported_output_formats(&self) -> Result<SupportedOutputFormats, FormatsEnumerationError> {
+    pub fn supported_output_formats(
+        &self,
+    ) -> Result<SupportedOutputFormats, FormatsEnumerationError> {
         self.supported_formats(kAudioObjectPropertyScopeOutput)
     }
 
     fn default_format(
         &self,
         scope: AudioObjectPropertyScope,
-    ) -> Result<Format, DefaultFormatError>
-    {
+    ) -> Result<Format, DefaultFormatError> {
         fn default_format_error_from_os_status(status: OSStatus) -> Option<DefaultFormatError> {
             let err = match coreaudio::Error::from_os_status(status) {
                 Err(err) => err,
                 Ok(_) => return None,
             };
             match err {
-                coreaudio::Error::RenderCallbackBufferFormatDoesNotMatchAudioUnitStreamFormat |
-                coreaudio::Error::NoKnownSubtype |
-                coreaudio::Error::AudioUnit(coreaudio::error::AudioUnitError::FormatNotSupported) |
-                coreaudio::Error::AudioCodec(_) |
-                coreaudio::Error::AudioFormat(_) => Some(DefaultFormatError::StreamTypeNotSupported),
+                coreaudio::Error::RenderCallbackBufferFormatDoesNotMatchAudioUnitStreamFormat
+                | coreaudio::Error::NoKnownSubtype
+                | coreaudio::Error::AudioUnit(
+                    coreaudio::error::AudioUnitError::FormatNotSupported,
+                )
+                | coreaudio::Error::AudioCodec(_)
+                | coreaudio::Error::AudioFormat(_) => {
+                    Some(DefaultFormatError::StreamTypeNotSupported)
+                }
                 _ => Some(DefaultFormatError::DeviceNotAvailable),
             }
         }
@@ -341,11 +328,11 @@ struct StreamInner {
 impl From<coreaudio::Error> for CreationError {
     fn from(err: coreaudio::Error) -> CreationError {
         match err {
-            coreaudio::Error::RenderCallbackBufferFormatDoesNotMatchAudioUnitStreamFormat |
-            coreaudio::Error::NoKnownSubtype |
-            coreaudio::Error::AudioUnit(coreaudio::error::AudioUnitError::FormatNotSupported) |
-            coreaudio::Error::AudioCodec(_) |
-            coreaudio::Error::AudioFormat(_) => CreationError::FormatNotSupported,
+            coreaudio::Error::RenderCallbackBufferFormatDoesNotMatchAudioUnitStreamFormat
+            | coreaudio::Error::NoKnownSubtype
+            | coreaudio::Error::AudioUnit(coreaudio::error::AudioUnitError::FormatNotSupported)
+            | coreaudio::Error::AudioCodec(_)
+            | coreaudio::Error::AudioFormat(_) => CreationError::FormatNotSupported,
             _ => CreationError::DeviceNotAvailable,
         }
     }
@@ -426,21 +413,23 @@ impl EventLoop {
     #[inline]
     pub fn new() -> EventLoop {
         EventLoop {
-            active_callbacks: Arc::new(ActiveCallbacks { callbacks: Mutex::new(Vec::new()) }),
+            active_callbacks: Arc::new(ActiveCallbacks {
+                callbacks: Mutex::new(Vec::new()),
+            }),
             streams: Mutex::new(Vec::new()),
         }
     }
 
     #[inline]
     pub fn run<F>(&self, mut callback: F) -> !
-        where F: FnMut(StreamId, StreamData) + Send
+    where
+        F: FnMut(StreamId, StreamData) + Send,
     {
         {
             let callback: &mut (FnMut(StreamId, StreamData) + Send) = &mut callback;
             self.active_callbacks
                 .callbacks
                 .lock()
-                .unwrap()
                 .push(unsafe { mem::transmute(callback) });
         }
 
@@ -454,7 +443,7 @@ impl EventLoop {
     }
 
     fn next_stream_id(&self) -> usize {
-        let streams_lock = self.streams.lock().unwrap();
+        let streams_lock = self.streams.lock();
         let stream_id = streams_lock
             .iter()
             .position(|n| n.is_none())
@@ -470,7 +459,7 @@ impl EventLoop {
             device_id: device_id,
         };
 
-        let mut streams_lock = self.streams.lock().unwrap();
+        let mut streams_lock = self.streams.lock();
         if stream_id == streams_lock.len() {
             streams_lock.push(Some(inner));
         } else {
@@ -483,8 +472,7 @@ impl EventLoop {
         &self,
         device: &Device,
         format: &Format,
-    ) -> Result<StreamId, CreationError>
-    {
+    ) -> Result<StreamId, CreationError> {
         // The scope and element for working with a device's input stream.
         let scope = Scope::Output;
         let element = Element::Input;
@@ -494,8 +482,8 @@ impl EventLoop {
             // Get the current sample rate.
             let mut property_address = AudioObjectPropertyAddress {
                 mSelector: kAudioDevicePropertyNominalSampleRate,
-	        mScope: kAudioObjectPropertyScopeGlobal,
-	        mElement: kAudioObjectPropertyElementMaster,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMaster,
             };
             let sample_rate: f64 = 0.0;
             let data_size = mem::size_of::<f64>() as u32;
@@ -511,10 +499,9 @@ impl EventLoop {
 
             // If the requested sample rate is different to the device sample rate, update the device.
             if sample_rate as u32 != format.sample_rate.0 {
-
                 // In order to avoid breaking existing input streams we `panic!` if there is already an
                 // active input stream for this device with the actual sample rate.
-                for stream in &*self.streams.lock().unwrap() {
+                for stream in &*self.streams.lock() {
                     if let Some(stream) = stream.as_ref() {
                         if stream.device_id == device.audio_device_id {
                             panic!("cannot change device sample rate for stream as an existing stream \
@@ -551,9 +538,9 @@ impl EventLoop {
 
                 // Now that we have the available ranges, pick the one matching the desired rate.
                 let sample_rate = format.sample_rate.0;
-                let maybe_index = ranges
-                    .iter()
-                    .position(|r| r.mMinimum as u32 == sample_rate && r.mMaximum as u32 == sample_rate);
+                let maybe_index = ranges.iter().position(|r| {
+                    r.mMinimum as u32 == sample_rate && r.mMaximum as u32 == sample_rate
+                });
                 let range_index = match maybe_index {
                     None => return Err(CreationError::FormatNotSupported),
                     Some(i) => i,
@@ -576,8 +563,8 @@ impl EventLoop {
                     let data_size = mem::size_of::<f64>();
                     let property_address = AudioObjectPropertyAddress {
                         mSelector: kAudioDevicePropertyNominalSampleRate,
-	                mScope: kAudioObjectPropertyScopeGlobal,
-	                mElement: kAudioObjectPropertyElementMaster,
+                        mScope: kAudioObjectPropertyScopeGlobal,
+                        mElement: kAudioObjectPropertyElementMaster,
                     };
                     AudioObjectGetPropertyData(
                         device_id,
@@ -657,10 +644,10 @@ impl EventLoop {
             let AudioBuffer {
                 mNumberChannels: _num_channels,
                 mDataByteSize: data_byte_size,
-                mData: data
+                mData: data,
             } = buffers[0];
 
-            let mut callbacks = active_callbacks.callbacks.lock().unwrap();
+            let mut callbacks = active_callbacks.callbacks.lock();
 
             // A small macro to simplify handling the callback for different sample types.
             macro_rules! try_callback {
@@ -672,8 +659,13 @@ impl EventLoop {
                         None => return Ok(()),
                     };
                     let buffer = InputBuffer { buffer: data_slice };
-                    let unknown_type_buffer = UnknownTypeInputBuffer::$SampleFormat(::InputBuffer { buffer: Some(buffer) });
-                    let stream_data = StreamData::Input { buffer: unknown_type_buffer };
+                    let unknown_type_buffer =
+                        UnknownTypeInputBuffer::$SampleFormat(::InputBuffer {
+                            buffer: Some(buffer),
+                        });
+                    let stream_data = StreamData::Input {
+                        buffer: unknown_type_buffer,
+                    };
                     callback(StreamId(stream_id), stream_data);
                 }};
             }
@@ -701,8 +693,7 @@ impl EventLoop {
         &self,
         device: &Device,
         format: &Format,
-    ) -> Result<StreamId, CreationError>
-    {
+    ) -> Result<StreamId, CreationError> {
         let mut audio_unit = audio_unit_from_device(device, false)?;
 
         // The scope and element for working with a device's output stream.
@@ -729,10 +720,10 @@ impl EventLoop {
             let AudioBuffer {
                 mNumberChannels: _num_channels,
                 mDataByteSize: data_byte_size,
-                mData: data
+                mData: data,
             } = (*args.data.data).mBuffers[0];
 
-            let mut callbacks = active_callbacks.callbacks.lock().unwrap();
+            let mut callbacks = active_callbacks.callbacks.lock();
 
             // A small macro to simplify handling the callback for different sample types.
             macro_rules! try_callback {
@@ -749,8 +740,13 @@ impl EventLoop {
                         }
                     };
                     let buffer = OutputBuffer { buffer: data_slice };
-                    let unknown_type_buffer = UnknownTypeOutputBuffer::$SampleFormat(::OutputBuffer { target: Some(buffer) });
-                    let stream_data = StreamData::Output { buffer: unknown_type_buffer };
+                    let unknown_type_buffer =
+                        UnknownTypeOutputBuffer::$SampleFormat(::OutputBuffer {
+                            target: Some(buffer),
+                        });
+                    let stream_data = StreamData::Output {
+                        buffer: unknown_type_buffer,
+                    };
                     callback(StreamId(stream_id), stream_data);
                 }};
             }
@@ -774,12 +770,12 @@ impl EventLoop {
     }
 
     pub fn destroy_stream(&self, stream_id: StreamId) {
-        let mut streams = self.streams.lock().unwrap();
+        let mut streams = self.streams.lock();
         streams[stream_id.0] = None;
     }
 
     pub fn play_stream(&self, stream: StreamId) {
-        let mut streams = self.streams.lock().unwrap();
+        let mut streams = self.streams.lock();
         let stream = streams[stream.0].as_mut().unwrap();
 
         if !stream.playing {
@@ -789,7 +785,7 @@ impl EventLoop {
     }
 
     pub fn pause_stream(&self, stream: StreamId) {
-        let mut streams = self.streams.lock().unwrap();
+        let mut streams = self.streams.lock();
         let stream = streams[stream.0].as_mut().unwrap();
 
         if stream.playing {
@@ -820,7 +816,8 @@ impl<'a, T> InputBuffer<'a, T> {
 }
 
 impl<'a, T> OutputBuffer<'a, T>
-    where T: Sample
+where
+    T: Sample,
 {
     #[inline]
     pub fn buffer(&mut self) -> &mut [T] {
