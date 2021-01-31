@@ -8,10 +8,11 @@ use stdweb::web::TypedArray;
 use stdweb::Reference;
 
 use crate::{
-    BufferSize, BuildStreamError, Data, DefaultStreamConfigError, DeviceIdError, DeviceNameError,
-    DevicesError, InputCallbackInfo, OutputCallbackInfo, PauseStreamError, PlayStreamError,
-    SampleFormat, SampleRate, StreamConfig, StreamError, SupportedBufferSize,
-    SupportedStreamConfig, SupportedStreamConfigRange, SupportedStreamConfigsError,
+    BackendSpecificError, BufferSize, BuildStreamError, Data, DefaultStreamConfigError,
+    DeviceIdError, DeviceNameError, DevicesError, InputCallbackInfo, OutputCallbackInfo,
+    PauseStreamError, PlayStreamError, SampleFormat, SampleRate, StreamConfig, StreamError,
+    SupportedBufferSize, SupportedStreamConfig, SupportedStreamConfigRange,
+    SupportedStreamConfigsError,
 };
 use traits::{DeviceTrait, HostTrait, StreamTrait};
 
