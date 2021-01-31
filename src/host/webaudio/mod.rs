@@ -143,8 +143,8 @@ impl DeviceTrait for Device {
         Device::name(self)
     }
 
-    fn id(&self) -> Result<String, BackendSpecificError> {
-        Err(id::BackendSpecific {
+    fn id(&self) -> Result<String, DeviceIdError> {
+        Err(DeviceIdError::BackendSpecific {
             err: BackendSpecificError {
                 description: "Unimplemented".into(),
             },
