@@ -45,6 +45,17 @@ pub enum DeviceNameError {
     },
 }
 
+/// An error that may occur while attempting to retrieve the device ID.
+#[derive(Debug, Error)]
+pub enum DeviceIdError {
+    /// See the `BackendSpecificError` docs for more information about this error variant.
+    #[error("{err}")]
+    BackendSpecific {
+        #[from]
+        err: BackendSpecificError,
+    },
+}
+
 /// Error that can happen when enumerating the list of supported formats.
 #[derive(Debug, Error)]
 pub enum SupportedStreamConfigsError {
