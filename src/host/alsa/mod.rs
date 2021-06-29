@@ -6,9 +6,9 @@ use self::alsa::poll::Descriptors;
 use self::parking_lot::Mutex;
 use crate::{
     BackendSpecificError, BufferSize, BuildStreamError, ChannelCount, Data,
-    DefaultStreamConfigError, DeviceNameError, DevicesError, InputCallbackInfo, OutputCallbackInfo,
-    PauseStreamError, PlayStreamError, SampleFormat, SampleRate, StreamConfig, StreamError,
-    SupportedBufferSize, SupportedStreamConfig, SupportedStreamConfigRange,
+    DefaultStreamConfigError, DeviceIdError, DeviceNameError, DevicesError, InputCallbackInfo,
+    OutputCallbackInfo, PauseStreamError, PlayStreamError, SampleFormat, SampleRate, StreamConfig,
+    StreamError, SupportedBufferSize, SupportedStreamConfig, SupportedStreamConfigRange,
     SupportedStreamConfigsError,
 };
 use std::cmp;
@@ -64,6 +64,10 @@ impl DeviceTrait for Device {
 
     fn name(&self) -> Result<String, DeviceNameError> {
         Device::name(self)
+    }
+
+    fn id(&self) -> Result<String, DeviceIdError> {
+        Device::id(self)
     }
 
     fn supported_input_configs(
@@ -293,6 +297,12 @@ impl Device {
 
     #[inline]
     fn name(&self) -> Result<String, DeviceNameError> {
+        Ok(self.name.clone())
+    }
+
+    #[inline]
+    fn id(&self) -> Result<String, DeviceIdError> {
+        // The name of the device is the closest thing we have for an unique identifier.
         Ok(self.name.clone())
     }
 

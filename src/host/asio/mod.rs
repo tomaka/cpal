@@ -2,9 +2,10 @@ extern crate asio_sys as sys;
 extern crate parking_lot;
 
 use crate::{
-    BuildStreamError, Data, DefaultStreamConfigError, DeviceNameError, DevicesError,
-    InputCallbackInfo, OutputCallbackInfo, PauseStreamError, PlayStreamError, SampleFormat,
-    StreamConfig, StreamError, SupportedStreamConfig, SupportedStreamConfigsError,
+    BackendSpecificError, BuildStreamError, Data, DefaultStreamConfigError, DeviceIdError,
+    DeviceNameError, DevicesError, InputCallbackInfo, OutputCallbackInfo, PauseStreamError,
+    PlayStreamError, SampleFormat, StreamConfig, StreamError, SupportedStreamConfig,
+    SupportedStreamConfigsError,
 };
 use traits::{DeviceTrait, HostTrait, StreamTrait};
 
@@ -60,6 +61,14 @@ impl DeviceTrait for Device {
 
     fn name(&self) -> Result<String, DeviceNameError> {
         Device::name(self)
+    }
+
+    fn id(&self) -> Result<String, DeviceIdError> {
+        Err(DeviceIdError::BackendSpecific {
+            err: BackendSpecificError {
+                description: "Unimplemented".into(),
+            },
+        })
     }
 
     fn supported_input_configs(

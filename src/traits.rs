@@ -1,7 +1,7 @@
 //! The suite of traits allowing CPAL to abstract over hosts, devices, event loops and stream IDs.
 
 use {
-    BuildStreamError, Data, DefaultStreamConfigError, DeviceNameError, DevicesError,
+    BuildStreamError, Data, DefaultStreamConfigError, DeviceIdError, DeviceNameError, DevicesError,
     InputCallbackInfo, InputDevices, OutputCallbackInfo, OutputDevices, PauseStreamError,
     PlayStreamError, Sample, SampleFormat, StreamConfig, StreamError, SupportedStreamConfig,
     SupportedStreamConfigRange, SupportedStreamConfigsError,
@@ -93,6 +93,9 @@ pub trait DeviceTrait {
 
     /// The human-readable name of the device.
     fn name(&self) -> Result<String, DeviceNameError>;
+
+    /// Identifier for the device, with a platform dependent format.
+    fn id(&self) -> Result<String, DeviceIdError>;
 
     /// An iterator yielding formats that are supported by the backend.
     ///

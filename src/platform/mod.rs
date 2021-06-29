@@ -215,6 +215,14 @@ macro_rules! impl_platform_host {
                 }
             }
 
+            fn id(&self) -> Result<String, crate::DeviceIdError> {
+                match self.0 {
+                    $(
+                        DeviceInner::$HostVariant(ref d) => d.id(),
+                    )*
+                }
+            }
+
             fn supported_input_configs(&self) -> Result<Self::SupportedInputConfigs, crate::SupportedStreamConfigsError> {
                 match self.0 {
                     $(

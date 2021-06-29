@@ -8,8 +8,8 @@ extern crate oboe;
 use crate::traits::{DeviceTrait, HostTrait, StreamTrait};
 use crate::{
     BackendSpecificError, BufferSize, BuildStreamError, Data, DefaultStreamConfigError,
-    DeviceNameError, DevicesError, InputCallbackInfo, OutputCallbackInfo, PauseStreamError,
-    PlayStreamError, Sample, SampleFormat, SampleRate, StreamConfig, StreamError,
+    DeviceIdError, DeviceNameError, DevicesError, InputCallbackInfo, OutputCallbackInfo,
+    PauseStreamError, PlayStreamError, Sample, SampleFormat, SampleRate, StreamConfig, StreamError,
     SupportedBufferSize, SupportedStreamConfig, SupportedStreamConfigRange,
     SupportedStreamConfigsError,
 };
@@ -283,6 +283,14 @@ impl DeviceTrait for Device {
             None => Ok("default".to_owned()),
             Some(info) => Ok(info.product_name.clone()),
         }
+    }
+
+    fn id(&self) -> Result<String, DeviceIdError> {
+        Err(DeviceIdError::BackendSpecific {
+            err: BackendSpecificError {
+                description: "Unimplemented".into(),
+            },
+        })
     }
 
     fn supported_input_configs(

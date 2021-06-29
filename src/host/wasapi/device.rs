@@ -1,7 +1,7 @@
 use crate::{
-    BackendSpecificError, BufferSize, Data, DefaultStreamConfigError, DeviceNameError,
-    DevicesError, InputCallbackInfo, OutputCallbackInfo, SampleFormat, SampleRate, StreamConfig,
-    SupportedBufferSize, SupportedStreamConfig, SupportedStreamConfigRange,
+    BackendSpecificError, BufferSize, Data, DefaultStreamConfigError, DeviceIdError,
+    DeviceNameError, DevicesError, InputCallbackInfo, OutputCallbackInfo, SampleFormat, SampleRate,
+    StreamConfig, SupportedBufferSize, SupportedStreamConfig, SupportedStreamConfigRange,
     SupportedStreamConfigsError, COMMON_SAMPLE_RATES,
 };
 use std;
@@ -75,6 +75,10 @@ impl DeviceTrait for Device {
 
     fn name(&self) -> Result<String, DeviceNameError> {
         Device::name(self)
+    }
+
+    fn id(&self) -> Result<String, DeviceIdError> {
+        Device::id(self)
     }
 
     fn supported_input_configs(
@@ -379,6 +383,31 @@ impl Device {
             PropVariantClear(&mut property_value);
 
             Ok(name_string)
+        }
+    }
+
+    pub fn id(&self) -> Result<String, DeviceIdError> {
+        unsafe {
+            let mut ptr_utf16 = ptr::null_mut();
+            (*self.device).GetId(&mut ptr_utf16);
+
+            let ptr_utf16 = *(&ptr_utf16 as *const _ as *const *const u16);
+
+            // Find the length of the friendly name.
+            let mut len = 0;
+            while *ptr_utf16.offset(len) != 0 {
+                len += 1;
+            }
+
+            // Create the utf16 slice and covert it into a string.
+            let id_slice = slice::from_raw_parts(ptr_utf16, len as usize);
+            let id_os_string: OsString = OsStringExt::from_wide(id_slice);
+            let id_string = match id_os_string.into_string() {
+                Ok(string) => string,
+                Err(os_string) => os_string.to_string_lossy().into(),
+            };
+
+            Ok(id_string)
         }
     }
 

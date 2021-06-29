@@ -1,7 +1,7 @@
 use crate::{
-    BackendSpecificError, BuildStreamError, Data, DefaultStreamConfigError, DeviceNameError,
-    InputCallbackInfo, OutputCallbackInfo, SampleFormat, SampleRate, StreamConfig, StreamError,
-    SupportedBufferSize, SupportedStreamConfig, SupportedStreamConfigRange,
+    BackendSpecificError, BuildStreamError, Data, DefaultStreamConfigError, DeviceIdError,
+    DeviceNameError, InputCallbackInfo, OutputCallbackInfo, SampleFormat, SampleRate, StreamConfig,
+    StreamError, SupportedBufferSize, SupportedStreamConfig, SupportedStreamConfigRange,
     SupportedStreamConfigsError,
 };
 use std::hash::{Hash, Hasher};
@@ -143,6 +143,14 @@ impl DeviceTrait for Device {
 
     fn name(&self) -> Result<String, DeviceNameError> {
         Ok(self.name.clone())
+    }
+
+    fn id(&self) -> Result<String, DeviceIdError> {
+        Err(DeviceIdError::BackendSpecific {
+            err: BackendSpecificError {
+                description: "Unimplemented".into(),
+            },
+        })
     }
 
     fn supported_input_configs(
